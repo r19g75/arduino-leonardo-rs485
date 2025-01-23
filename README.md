@@ -1,49 +1,63 @@
-# arduino-leonardo-rs485
-# Nazwa Projektu Arduino Leonardo z RS485
+arduino-leonardo-rs485
+Modbus Scanner & Analyzer
+Opis
+Narzędzie diagnostyczne do sieci Modbus RTU na RS485. Umożliwia:
 
-## Opis
-[Krótki, zwięzły opis projektu - cel, podstawowe funkcje]
+Skanowanie i identyfikację urządzeń slave
+Analizę zapytań mastera
+Wykrywanie błędów komunikacji i kolizji
+Pomiar czasów między zapytaniami
 
-## Wymagania sprzętowe
-- Arduino Leonardo
-- Moduł RS485
-- [Inne potrzebne komponenty]
+Wymagania sprzętowe
 
-## Wymagane biblioteki
-- [Nazwa biblioteki 1]
-- [Nazwa biblioteki 2]
+Arduino Leonardo
+Shield RS485 (np. DFRobot RS485 Shield)
+3 przyciski (dla pinów 8, 9, 10)
+LED (wbudowana pin 13)
 
-## Schemat podłączenia
-```
-[Opcjonalny schemat lub opis podłączenia modułów]
-```
+Schemat podłączenia
+Arduino Leonardo:
+- PIN 2  -> RS485 DIR
+- PIN 8  -> Przycisk MASTER
+- PIN 9  -> Przycisk SCAN
+- PIN 10 -> Przycisk STOP
+- PIN 13 -> Wbudowana LED
 
-## Instalacja
-1. Sklonuj repozytorium
-2. Otwórz projekt w PlatformIO
-3. Wgraj kod do Arduino
+Instalacja
 
-## Konfiguracja
-- [Specyficzne ustawienia]
-- [Parametry konfiguracyjne]
+Sklonuj repozytorium
+Otwórz projekt w PlatformIO
+Wgraj kod do Arduino Leonardo
 
-## Użycie
-[Przykłady użycia, podstawowe instrukcje]
+Użycie
 
-## Rozwiązywanie problemów
-- [Możliwe problemy]
-- [Sugerowane rozwiązania]
+SCAN (PIN 9): Skanowanie slave'ów, odczyt 10 pierwszych rejestrów
+MASTER (PIN 8): Analiza zapytań mastera, statystyki błędów
+STOP (PIN 10): Zatrzymanie i wyświetlenie raportu
 
-## TODO
-- [ ] [Planowane ulepszenia]
-- [ ] [Przyszłe funkcje]
+Funkcje
 
-## Licencja
+Wykrywanie urządzeń Modbus
+Odczyt rejestrów
+Analiza ramek mastera
+Statystyki czasowe komunikacji
+Wykrywanie kolizji i błędów CRC
+
+Rozwiązywanie problemów
+
+Problem z komunikacją: Sprawdź prędkość transmisji
+Brak odpowiedzi: Sprawdź połączenie RS485 (A/B)
+Błędy CRC: Sprawdź terminację linii
+
+TODO
+Obsługa innych funkcji Modbus
+Interfejs konfiguracyjny
+Zapis logów na SD
+Wykrywanie parametrów parzystości
+
+Licencja
 MIT License
-
-## Autor
-[Twoje imię/nick]
-
-## Dodatkowe informacje
-[Opcjonalne: linki, referencje, podziękowania]
-
+Autor
+Robert
+Dodatkowe informacje
+Projekt stworzony jako narzędzie diagnostyczne do sieci Modbus RTU. Pomocny przy uruchamianiu i diagnostyce problemów komunikacyjnych.
