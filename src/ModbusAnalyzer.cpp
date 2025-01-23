@@ -9,8 +9,11 @@ ModbusAnalyzer::ModbusAnalyzer(HardwareSerial& modbusSerial)
     , _baudIndex(0)
     , _bufferIndex(0)
     , _lastActivityTime(0)
+    , _lastFrameTime(0)
 {
     memset(&_masterInfo, 0, sizeof(MasterInfo));
+    _masterInfo.minQueryInterval = UINT32_MAX;
+    _masterInfo.maxQueryInterval = 0;
 }
 
 void ModbusAnalyzer::begin() {
@@ -22,7 +25,10 @@ void ModbusAnalyzer::startAnalysis() {
     _baudIndex = 0;
     _bufferIndex = 0;
     _lastActivityTime = millis();
+    _lastFrameTime = millis();
     memset(&_masterInfo, 0, sizeof(MasterInfo));
+    _masterInfo.minQueryInterval = UINT32_MAX;
+    _masterInfo.maxQueryInterval = 0;
     _serial.begin(BAUD_RATES[0]);
     Serial.println(F("\nRozpoczynam nasluchiwanie magistrali..."));
 }
@@ -36,21 +42,28 @@ void ModbusAnalyzer::update() {
     if (!_analyzing) return;
 
     if (_serial.available()) {
+        checkCollision();
+        
         while (_serial.available() && _bufferIndex < MAX_BUFFER) {
             _buffer[_bufferIndex++] = _serial.read();
             _lastActivityTime = millis();
         }
         
+        _masterInfo.totalFrames++;
+        
         if (_bufferIndex >= 8) {
             if (processFrame()) {
                 _masterInfo.baudRate = BAUD_RATES[_baudIndex];
                 updateMasterInfo();
+                updateTimingStats();
+                _lastFrameTime = millis();
                 _bufferIndex = 0;
+            } else {
+                _masterInfo.invalidFrames++;
             }
         }
     }
     
-    // Zmiana prędkości jeśli brak aktywności
     if (millis() - _lastActivityTime > 1000) {
         changeBaudRate();
         _lastActivityTime = millis();
@@ -76,46 +89,83 @@ void ModbusAnalyzer::changeBaudRate() {
     Serial.println(F(" baud"));
 }
 
+void ModbusAnalyzer::updateTimingStats() {
+    uint32_t currentTime = millis();
+    if (_masterInfo.queryCount > 0) {
+        uint32_t interval = currentTime - _masterInfo.lastQueryTime;
+        
+        if (interval < _masterInfo.minQueryInterval)
+            _masterInfo.minQueryInterval = interval;
+            
+        if (interval > _masterInfo.maxQueryInterval)
+            _masterInfo.maxQueryInterval = interval;
+            
+        _masterInfo.totalQueryTime += interval;
+    }
+    
+    _masterInfo.lastQueryTime = currentTime;
+    _masterInfo.queryCount++;
+}
+
+void ModbusAnalyzer::checkCollision() {
+    uint32_t currentTime = millis();
+    uint32_t timeSinceLastFrame = currentTime - _lastFrameTime;
+    
+    if (timeSinceLastFrame < COLLISION_THRESHOLD) {
+        _masterInfo.collisions++;
+        Serial.print(F("\n!!! Wykryto kolizje - "));
+        Serial.print(timeSinceLastFrame);
+        Serial.println(F("ms od ostatniej ramki"));
+    }
+}
+
 bool ModbusAnalyzer::processFrame() {
     uint16_t receivedCrc = (_buffer[_bufferIndex-1] << 8) | _buffer[_bufferIndex-2];
     uint16_t calculatedCrc = calculateCRC16(_buffer, _bufferIndex-2);
     
-    if (receivedCrc == calculatedCrc) {
-        Serial.print(F("\nWykryto ramke Modbus:"));
-        Serial.print(F("\nAdres urzadzenia: "));
-        Serial.print(_buffer[0]);
-        Serial.print(F("\nKod funkcji: 0x"));
-        Serial.print(_buffer[1], HEX);
-        Serial.print(F("\nPredkosc: "));
-        Serial.print(BAUD_RATES[_baudIndex]);
-        Serial.println(F(" baud"));
-        
-        Serial.print(F("Ramka HEX:"));
-        for (uint8_t i = 0; i < _bufferIndex; i++) {
-            Serial.print(F(" "));
-            if (_buffer[i] < 0x10) Serial.print('0');
-            Serial.print(_buffer[i], HEX);
-        }
-        Serial.println();
-        return true;
+    if (receivedCrc != calculatedCrc) {
+        _masterInfo.crcErrors++;
+        return false;
     }
-    return false;
+    
+    Serial.print(F("\nWykryto ramke Modbus:"));
+    Serial.print(F("\nAdres: "));
+    Serial.print(_buffer[0]);
+    Serial.print(F(" Funkcja: 0x"));
+    Serial.print(_buffer[1], HEX);
+    Serial.print(F(" Predkosc: "));
+    Serial.print(BAUD_RATES[_baudIndex]);
+    Serial.println(F(" baud"));
+    
+    Serial.print(F("Ramka HEX:"));
+    for (uint8_t i = 0; i < _bufferIndex; i++) {
+        Serial.print(F(" "));
+        if (_buffer[i] < 0x10) Serial.print('0');
+        Serial.print(_buffer[i], HEX);
+    }
+    Serial.println();
+    
+    return true;
 }
 
 void ModbusAnalyzer::updateMasterInfo() {
-    // Dodaj adres jeśli nowy
     if (!isAddressInList(_buffer[0]) && _masterInfo.addressCount < 10) {
         _masterInfo.slaveAddresses[_masterInfo.addressCount++] = _buffer[0];
     }
     
-    // Dodaj funkcję jeśli nowa
     if (!isFunctionInList(_buffer[1]) && _masterInfo.functionCount < 5) {
         _masterInfo.functions[_masterInfo.functionCount++] = _buffer[1];
     }
     
-    // Aktualizuj informacje o rejestrach
     _masterInfo.startRegister = (_buffer[2] << 8) | _buffer[3];
     _masterInfo.registerCount = (_buffer[4] << 8) | _buffer[5];
+}
+
+void ModbusAnalyzer::clearBuffer() {
+    while (_serial.available()) {
+        _serial.read();
+    }
+    _bufferIndex = 0;
 }
 
 bool ModbusAnalyzer::isAddressInList(uint8_t address) const {
@@ -148,15 +198,10 @@ uint16_t ModbusAnalyzer::calculateCRC16(uint8_t* buffer, uint8_t length) const {
     return crc;
 }
 
-void ModbusAnalyzer::clearBuffer() {
-    while (_serial.available()) {
-        _serial.read();
-    }
-    _bufferIndex = 0;
-}
-
 void ModbusAnalyzer::showSummary() const {
     Serial.println(F("\n=== Podsumowanie analizy Mastera ==="));
+    
+    // Podstawowe informacje
     Serial.print(F("Predkosc transmisji: "));
     Serial.print(_masterInfo.baudRate);
     Serial.println(F(" baud"));
@@ -179,6 +224,31 @@ void ModbusAnalyzer::showSummary() const {
     Serial.println(_masterInfo.startRegister);
     Serial.print(F("Liczba rejestrow: "));
     Serial.println(_masterInfo.registerCount);
+    
+    // Statystyki czasowe
+    Serial.println(F("\nStatystyki czasowe:"));
+    if (_masterInfo.queryCount > 0) {
+        Serial.print(F("Minimalny odstep: "));
+        Serial.print(_masterInfo.minQueryInterval);
+        Serial.println(F(" ms"));
+        Serial.print(F("Maksymalny odstep: "));
+        Serial.print(_masterInfo.maxQueryInterval);
+        Serial.println(F(" ms"));
+        Serial.print(F("Sredni odstep: "));
+        Serial.print(_masterInfo.totalQueryTime / _masterInfo.queryCount);
+        Serial.println(F(" ms"));
+    }
+    
+    // Statystyki błędów
+    Serial.println(F("\nStatystyki bledow:"));
+    Serial.print(F("Ramki odebrane: "));
+    Serial.println(_masterInfo.totalFrames);
+    Serial.print(F("Bledy CRC: "));
+    Serial.println(_masterInfo.crcErrors);
+    Serial.print(F("Wykryte kolizje: "));
+    Serial.println(_masterInfo.collisions);
+    Serial.print(F("Nieprawidlowe ramki: "));
+    Serial.println(_masterInfo.invalidFrames);
     Serial.println(F("==============================="));
 }
 

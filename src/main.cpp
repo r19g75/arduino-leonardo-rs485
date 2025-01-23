@@ -3,7 +3,7 @@
 #include "ModbusAnalyzer.h"
 
 const uint8_t RS485_DIR_PIN = 2;
-const uint8_t MASTER_BUTTON = 8;    // Przycisk dla analizy mastera
+const uint8_t MASTER_BUTTON = 8;    // Analiza mastera
 const uint8_t SCAN_BUTTON = 9;      // Skanowanie slave
 const uint8_t STOP_BUTTON = 10;     // Stop
 const uint8_t LED_PIN = 13;
@@ -31,14 +31,13 @@ void setup() {
     scanner.begin();
     analyzer.begin();
     
-    Serial.println(F("\nModbus Scanner & Analyzer"));
-    Serial.println(F("SCAN (PIN 9) - skanowanie urzadzen"));
-    Serial.println(F("MASTER (PIN 8) - nasluchiwanie mastera"));
-    Serial.println(F("STOP (PIN 10) - zatrzymanie"));
+    Serial.println(F("\nModbus Scanner & Analyzer v1.0"));
+    Serial.println(F("1. SCAN (PIN 9) - skanowanie slave"));
+    Serial.println(F("2. MASTER (PIN 8) - nasłuchiwanie mastera"));
+    Serial.println(F("3. STOP (PIN 10) - zatrzymanie i raport"));
 }
 
 void loop() {
-    // LED
     if (currentMode != Mode::IDLE) {
         unsigned long interval = (currentMode == Mode::SCANNING) ? 500 : 100;
         if (millis() - lastBlink >= interval) {
@@ -46,9 +45,10 @@ void loop() {
             digitalWrite(LED_PIN, ledState);
             lastBlink = millis();
         }
+    } else {
+        digitalWrite(LED_PIN, LOW);
     }
     
-    // Przyciski w trybie IDLE
     if (currentMode == Mode::IDLE) {
         if (digitalRead(SCAN_BUTTON) == LOW) {
             delay(50);
@@ -67,7 +67,6 @@ void loop() {
         }
     }
     
-    // STOP działa zawsze
     if (digitalRead(STOP_BUTTON) == LOW) {
         delay(50);
         if (digitalRead(STOP_BUTTON) == LOW) {
@@ -82,7 +81,6 @@ void loop() {
         }
     }
     
-    // Aktualizacja aktywnego trybu
     switch (currentMode) {
         case Mode::SCANNING:
             scanner.update();
